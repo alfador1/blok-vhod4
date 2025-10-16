@@ -74,7 +74,7 @@
         
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            grid-template-columns: 2fr 1fr 1fr;
             gap: 15px;
             margin-bottom: 15px;
         }
@@ -322,6 +322,10 @@
             th, td {
                 padding: 10px;
             }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
         }
     </style>
 </head>
@@ -346,8 +350,12 @@
                         <input type="text" id="name" placeholder="Иван Петров" required>
                     </div>
                     <div class="form-group">
+                        <label for="entrance">Вход</label>
+                        <input type="text" id="entrance" placeholder="А, Б, В..." required>
+                    </div>
+                    <div class="form-group">
                         <label for="apartment">Апартамент №</label>
-                        <input type="text" id="apartment" placeholder="12" required>
+                        <input type="text" id="apartment" placeholder="17" required>
                     </div>
                 </div>
                 <div class="form-group">
@@ -366,6 +374,7 @@
                     <tr>
                         <th>№</th>
                         <th>Име</th>
+                        <th>Вход</th>
                         <th>Ап. №</th>
                         <th>Предложение</th>
                         <th>Дата</th>
@@ -469,11 +478,13 @@
             e.preventDefault();
             
             const name = document.getElementById('name').value;
+            const entrance = document.getElementById('entrance').value;
             const apartment = document.getElementById('apartment').value;
             const suggestion = document.getElementById('suggestion').value;
             
             push(suggestionsRef, {
                 name: name,
+                entrance: entrance,
                 apartment: apartment,
                 suggestion: suggestion,
                 votes: 0,
@@ -551,7 +562,7 @@
             if (suggestionsArray.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="7" class="empty-state">
+                        <td colspan="8" class="empty-state">
                             <p>Все още няма предложения</p>
                             <p>Бъдете първи, които да добавят предложение!</p>
                         </td>
@@ -564,6 +575,7 @@
                     <tr>
                         <td>${index + 1}</td>
                         <td><strong>${item.name}</strong></td>
+                        <td><strong>${item.entrance || '-'}</strong></td>
                         <td>${item.apartment}</td>
                         <td>${item.suggestion}</td>
                         <td>${item.date}</td>
