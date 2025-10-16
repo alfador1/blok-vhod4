@@ -43,15 +43,16 @@
         }
         
         .alert {
-            background: #fef5e7;
-            border-left: 4px solid #f39c12;
+            background: #d4edda;
+            border-left: 4px solid #28a745;
             padding: 15px;
             margin-top: 15px;
             border-radius: 4px;
+            color: #155724;
         }
         
         .alert strong {
-            color: #f39c12;
+            color: #155724;
         }
         
         .form-section {
@@ -298,6 +299,13 @@
             margin-top: 10px;
         }
         
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-weight: 600;
+        }
+        
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 1.5rem;
@@ -322,9 +330,9 @@
         <!-- Header -->
         <div class="header">
             <h1>📋 Предложения за Събрание на Блока</h1>
-            <p>Добавете вашите предложения за следващото събрание. Другите жители могат да гласуват.</p>
+            <p>Добавете вашите предложения за следващото събрание. Всички жители виждат предложенията в реално време!</p>
             <div class="alert">
-                <strong>🔒 Защита:</strong> Можете да гласувате само веднъж на 24 часа за всяко предложение. За изтриване се изисква администраторска парола.
+                <strong>🌐 Реална синхронизация:</strong> Всички промени се виждат от всички жители веднага! Можете да гласувате веднъж на 24 часа за всяко предложение.
             </div>
         </div>
 
@@ -352,7 +360,8 @@
 
         <!-- Table -->
         <div class="table-section">
-            <table>
+            <div id="loadingIndicator" class="loading">Зареждане...</div>
+            <table style="display: none;" id="mainTable">
                 <thead>
                     <tr>
                         <th>№</th>
@@ -365,12 +374,6 @@
                     </tr>
                 </thead>
                 <tbody id="suggestionsTable">
-                    <tr>
-                        <td colspan="7" class="empty-state">
-                            <p>Все още няма предложения</p>
-                            <p>Бъдете първи, които да добавят предложение!</p>
-                        </td>
-                    </tr>
                 </tbody>
             </table>
         </div>
@@ -397,30 +400,34 @@
         </div>
     </div>
 
-    <script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getDatabase, ref, push, onValue, remove, update } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+        // ===== FIREBASE КОНФИГУРАЦИЯ =====
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRffMtdoKUcu3dN_SQamooYCO_67n3l1Y",
+            authDomain: "test-project-e7e09.firebaseapp.com",
+            databaseURL: "https://test-project-e7e09-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "test-project-e7e09",
+            storageBucket: "test-project-e7e09.firebasestorage.app",
+            messagingSenderId: "963850933779",
+            appId: "1:963850933779:web:c6eb91fd54f7cb042a11e6"
+        };
+        // ==================================
+
         // ===== АДМИНИСТРАТОРСКА ПАРОЛА =====
-        // ПРОМЕНИ ТАЗИ ПАРОЛА ТУК:
         const ADMIN_PASSWORD = "blok2025";  // <-- Промени това!
         // ====================================
-        
-        let suggestions = [];
-        let nextId = 1;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const suggestionsRef = ref(database, 'suggestions');
+
+        let suggestions = {};
         let deleteTargetId = null;
-
-        // Load from localStorage
-        function loadSuggestions() {
-            const saved = localStorage.getItem('blockSuggestions');
-            if (saved) {
-                suggestions = JSON.parse(saved);
-                nextId = Math.max(...suggestions.map(s => s.id), 0) + 1;
-                renderSuggestions();
-            }
-        }
-
-        // Save to localStorage
-        function saveSuggestions() {
-            localStorage.setItem('blockSuggestions', JSON.stringify(suggestions));
-        }
 
         // Format date
         function formatDate() {
@@ -448,6 +455,15 @@
             localStorage.setItem('userVotes', JSON.stringify(votes));
         }
 
+        // Listen for changes in real-time
+        onValue(suggestionsRef, (snapshot) => {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('mainTable').style.display = 'table';
+            
+            suggestions = snapshot.val() || {};
+            renderSuggestions();
+        });
+
         // Add suggestion
         document.getElementById('suggestionForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -456,17 +472,14 @@
             const apartment = document.getElementById('apartment').value;
             const suggestion = document.getElementById('suggestion').value;
             
-            suggestions.push({
-                id: nextId++,
+            push(suggestionsRef, {
                 name: name,
                 apartment: apartment,
                 suggestion: suggestion,
                 votes: 0,
-                date: formatDate()
+                date: formatDate(),
+                timestamp: Date.now()
             });
-            
-            saveSuggestions();
-            renderSuggestions();
             
             // Clear form
             document.getElementById('suggestionForm').reset();
@@ -475,24 +488,25 @@
         });
 
         // Vote
-        function vote(id) {
+        window.vote = function(id) {
             if (!canVote(id)) {
                 alert('❌ Вече сте гласували за това предложение. Можете да гласувате отново след 24 часа.');
                 return;
             }
             
-            const suggestion = suggestions.find(s => s.id === id);
+            const suggestion = suggestions[id];
             if (suggestion) {
-                suggestion.votes++;
+                const suggestionRef = ref(database, `suggestions/${id}`);
+                update(suggestionRef, {
+                    votes: (suggestion.votes || 0) + 1
+                });
                 recordVote(id);
-                saveSuggestions();
-                renderSuggestions();
                 alert('✅ Гласът ви е записан!');
             }
         }
 
         // Open delete modal
-        function showDeleteModal(id) {
+        window.showDeleteModal = function(id) {
             deleteTargetId = id;
             document.getElementById('deleteModal').style.display = 'block';
             document.getElementById('adminPassword').value = '';
@@ -500,20 +514,19 @@
         }
 
         // Close delete modal
-        function closeDeleteModal() {
+        window.closeDeleteModal = function() {
             document.getElementById('deleteModal').style.display = 'none';
             deleteTargetId = null;
         }
 
         // Confirm delete
-        function confirmDelete() {
+        window.confirmDelete = function() {
             const password = document.getElementById('adminPassword').value;
             const errorDiv = document.getElementById('passwordError');
             
             if (password === ADMIN_PASSWORD) {
-                suggestions = suggestions.filter(s => s.id !== deleteTargetId);
-                saveSuggestions();
-                renderSuggestions();
+                const suggestionRef = ref(database, `suggestions/${deleteTargetId}`);
+                remove(suggestionRef);
                 closeDeleteModal();
                 alert('✅ Предложението е изтрито!');
             } else {
@@ -533,8 +546,9 @@
         // Render table
         function renderSuggestions() {
             const tbody = document.getElementById('suggestionsTable');
+            const suggestionsArray = Object.entries(suggestions).sort((a, b) => b[1].timestamp - a[1].timestamp);
             
-            if (suggestions.length === 0) {
+            if (suggestionsArray.length === 0) {
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="7" class="empty-state">
@@ -544,8 +558,8 @@
                     </tr>
                 `;
             } else {
-                tbody.innerHTML = suggestions.map((item, index) => {
-                    const canVoteNow = canVote(item.id);
+                tbody.innerHTML = suggestionsArray.map(([id, item], index) => {
+                    const canVoteNow = canVote(id);
                     return `
                     <tr>
                         <td>${index + 1}</td>
@@ -554,14 +568,14 @@
                         <td>${item.suggestion}</td>
                         <td>${item.date}</td>
                         <td class="center">
-                            <span class="votes-badge">👍 ${item.votes}</span>
+                            <span class="votes-badge">👍 ${item.votes || 0}</span>
                         </td>
                         <td class="center">
                             <div class="action-buttons">
-                                <button class="btn-vote" onclick="vote(${item.id})" ${!canVoteNow ? 'disabled title="Вече сте гласували"' : ''}>
+                                <button class="btn-vote" onclick="vote('${id}')" ${!canVoteNow ? 'disabled title="Вече сте гласували"' : ''}>
                                     👍 Гласувай
                                 </button>
-                                <button class="btn-delete" onclick="showDeleteModal(${item.id})">
+                                <button class="btn-delete" onclick="showDeleteModal('${id}')">
                                     🔒 Изтрий
                                 </button>
                             </div>
@@ -571,15 +585,12 @@
             }
             
             // Update summary
-            const totalVotes = suggestions.reduce((sum, s) => sum + s.votes, 0);
+            const totalVotes = Object.values(suggestions).reduce((sum, s) => sum + (s.votes || 0), 0);
             document.getElementById('summary').innerHTML = `
-                <strong>Общо предложения:</strong> ${suggestions.length} | 
+                <strong>Общо предложения:</strong> ${suggestionsArray.length} | 
                 <strong>Общо гласове:</strong> ${totalVotes}
             `;
         }
-
-        // Load on page load
-        loadSuggestions();
     </script>
 </body>
 </html>
